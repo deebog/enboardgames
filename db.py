@@ -1,5 +1,4 @@
 import sqlite3
-import os
 from datetime import datetime
 
 DB_FILE = "bot.db"
@@ -7,29 +6,23 @@ DB_FILE = "bot.db"
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS games (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE
-        )
-    """)
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS sessions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            game_id INTEGER,
-            dt_utc TEXT,
-            limit_participants INTEGER,
-            FOREIGN KEY(game_id) REFERENCES games(id)
-        )
-    """)
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS participants (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id INTEGER,
-            username TEXT,
-            FOREIGN KEY(session_id) REFERENCES sessions(id)
-        )
-    """)
+    c.execute("""CREATE TABLE IF NOT EXISTS games (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE
+    )""")
+    c.execute("""CREATE TABLE IF NOT EXISTS sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        game_id INTEGER,
+        dt_utc TEXT,
+        limit_participants INTEGER,
+        FOREIGN KEY(game_id) REFERENCES games(id)
+    )""")
+    c.execute("""CREATE TABLE IF NOT EXISTS participants (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id INTEGER,
+        username TEXT,
+        FOREIGN KEY(session_id) REFERENCES sessions(id)
+    )""")
     conn.commit()
     conn.close()
 
@@ -44,14 +37,15 @@ def list_games():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("SELECT id, name FROM games")
-    result = c.fetchall()
+    result = [{"id": r[0], "name": r[1]} for r in c.fetchall()]
     conn.close()
-    return [{"id": r[0], "name": r[1]} for r in result]
+    return result
 
 def add_session(game_id, dt_utc, limit):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("INSERT INTO sessions(game_id, dt_utc, limit_participants) VALUES (?, ?, ?)", (game_id, dt_utc, limit))
+    c.execute("INSERT INTO sessions(game_id, dt_utc, limit_participants) VALUES (?, ?, ?)",
+              (game_id, dt_utc, limit))
     conn.commit()
     conn.close()
 
