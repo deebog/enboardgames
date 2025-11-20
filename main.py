@@ -1,3 +1,11 @@
+import os
+
+print("FILES IN WORKING DIR:")
+print(os.listdir("."))
+
+import telegram
+print("PTB VERSION:", telegram.__version__)
+
 from telegram.ext import ApplicationBuilder
 from config import TOKEN
 from handlers import register_handlers
