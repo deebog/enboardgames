@@ -3,6 +3,7 @@ import config
 from handlers import start, list_sessions, list_games, button_handler
 
 def main():
+    # Создаем приложение
     app = ApplicationBuilder().token(config.TOKEN).build()
 
     # Команды
@@ -13,6 +14,7 @@ def main():
     # Обработчик всех кнопок
     app.add_handler(CallbackQueryHandler(button_handler))
 
+    # Запуск long polling (не нужен порт, подходит для Render Background Worker)
     app.run_polling()
 
 if __name__ == "__main__":
