@@ -15,7 +15,8 @@ def format_session_text(session):
 def get_session_buttons(session, user_id):
     buttons = []
     is_admin = user_id in config.ADMINS
-    if user_id in [p for p in session['participants']]:
+
+    if user_id in session['participants']:
         buttons.append(InlineKeyboardButton("❌ Отписаться", callback_data=f"leave_{session['id']}"))
     elif len(session['participants']) < session['limit']:
         buttons.append(InlineKeyboardButton("✅ Записаться", callback_data=f"join_{session['id']}"))
@@ -26,4 +27,11 @@ def get_session_buttons(session, user_id):
         buttons.append(InlineKeyboardButton("✏️ Редактировать", callback_data=f"edit_{session['id']}"))
         buttons.append(InlineKeyboardButton("🗑️ Удалить", callback_data=f"delete_{session['id']}"))
 
+    return InlineKeyboardMarkup.from_row(buttons)
+
+def get_game_buttons(game_id):
+    buttons = [
+        InlineKeyboardButton("✏️ Редактировать", callback_data=f"editgame_{game_id}"),
+        InlineKeyboardButton("🗑️ Удалить", callback_data=f"deletegame_{game_id}")
+    ]
     return InlineKeyboardMarkup.from_row(buttons)
