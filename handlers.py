@@ -1,27 +1,50 @@
-from telegram.ext import CommandHandler, CallbackQueryHandler, ConversationHandler, MessageHandler, filters
-from keyboards import format_session_text, get_session_buttons, get_add_game_button
+from telegram.ext import (
+    CommandHandler, CallbackQueryHandler, ConversationHandler, MessageHandler, filters
+)
+from keyboards import (
+    format_session_text, get_session_buttons, get_add_game_button, get_game_selection_buttons
+)
 import db, config
+from datetime import datetime
 
-# Состояние ConversationHandler для добавления игры
-INPUT_GAME_NAME = range(1)
+# Conversation states
+INPUT_GAME_NAME, SELECT_GAME, INPUT_SESSION_DT, INPUT_SESSION_LIMIT = range(4)
 
 def register_handlers(app):
+    # Команды
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("sessions", list_sessions))
     app.add_handler(CommandHandler("games", list_games))
+    
+    # Основной обработчик кнопок
     app.add_handler(CallbackQueryHandler(button_handler))
-
+    
     # ConversationHandler для добавления игры
-    conv = ConversationHandler(
+    conv_addgame = ConversationHandler(
         entry_points=[CallbackQueryHandler(add_game_start, pattern="addgame")],
         states={INPUT_GAME_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_game_name)]},
         fallbacks=[]
     )
-    app.add_handler(conv)
+    app.add_handler(conv_addgame)
 
+    # ConversationHandler для создания сессии
+    conv_addsession = ConversationHandler(
+        entry_points=[CallbackQueryHandler(add_session_start, pattern="addsession")],
+        states={
+            SELECT_GAME: [CallbackQueryHandler(select_game)],
+            INPUT_SESSION_DT: [MessageHandler(filters.TEXT & ~filters.COMMAND, input_session_dt)],
+            INPUT_SESSION_LIMIT: [MessageHandler(filters.TEXT & ~filters.COMMAND, input_session_limit)],
+        },
+        fallbacks=[]
+    )
+    app.add_handler(conv_addsession)
+
+# Команды
 async def start(update, context):
-    await update.message.reply_text("Привет! Я бот для записи на настольные игры.\n"
-                                    "Используй /sessions чтобы увидеть встречи и /games для списка игр.")
+    await update.message.reply_text(
+        "Привет! Я бот для записи на настольные игры.\n"
+        "Используй /sessions чтобы увидеть встречи и /games для списка игр."
+    )
 
 async def list_sessions(update, context):
     user_id = update.effective_user.id
@@ -37,15 +60,12 @@ async def list_sessions(update, context):
 async def list_games(update, context):
     user_id = update.effective_user.id
     games = db.list_games()
-    if not games:
-        await update.message.reply_text("Список игр пуст.")
-        return
-
-    text = "Список игр:\n" + "\n".join([g['name'] for g in games])
-    if user_id in config.ADMINS:
-        kb = get_add_game_button()
+    text = "Список игр:\n"
+    if games:
+        text += "\n".join([g['name'] for g in games])
     else:
-        kb = None
+        text += "(пусто)"
+    kb = get_add_game_button() if user_id in config.ADMINS else None
     await update.message.reply_text(text, reply_markup=kb)
 
 # Добавление игры
@@ -57,6 +77,46 @@ async def add_game_name(update, context):
     name = update.message.text.strip()
     db.add_game(name)
     await update.message.reply_text(f"Игра '{name}' добавлена ✅")
+    return ConversationHandler.END
+
+# Добавление сессии
+async def add_session_start(update, context):
+    games = db.list_games()
+    if not games:
+        await update.callback_query.message.reply_text("Сначала добавьте игры через /games")
+        return ConversationHandler.END
+    await update.callback_query.message.reply_text("Выберите игру для новой сессии:", reply_markup=get_game_selection_buttons(games))
+    return SELECT_GAME
+
+async def select_game(update, context):
+    query = update.callback_query
+    await query.answer()
+    game_id = int(query.data.split("_")[1])
+    context.user_data['new_session_game_id'] = game_id
+    await query.edit_message_text("Введите дату и время сессии в формате YYYY-MM-DD HH:MM (UTC):")
+    return INPUT_SESSION_DT
+
+async def input_session_dt(update, context):
+    dt_text = update.message.text.strip()
+    try:
+        dt_obj = datetime.strptime(dt_text, "%Y-%m-%d %H:%M")
+        context.user_data['new_session_dt'] = dt_obj.isoformat()
+        await update.message.reply_text("Введите лимит участников:")
+        return INPUT_SESSION_LIMIT
+    except:
+        await update.message.reply_text("Неверный формат даты. Попробуйте еще раз (YYYY-MM-DD HH:MM):")
+        return INPUT_SESSION_DT
+
+async def input_session_limit(update, context):
+    try:
+        limit = int(update.message.text.strip())
+        game_id = context.user_data['new_session_game_id']
+        dt_utc = context.user_data['new_session_dt']
+        db.add_session(game_id, dt_utc, limit)
+        await update.message.reply_text("Сессия создана ✅")
+    except:
+        await update.message.reply_text("Неверный лимит. Попробуйте еще раз:")
+        return INPUT_SESSION_LIMIT
     return ConversationHandler.END
 
 # Кнопки сессий
