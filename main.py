@@ -1,19 +1,8 @@
 import os
+from telegram.ext import Application
+from handlers import register_handlers
 import db
 import config
-from handlers import register_handlers
-from jobs import send_reminder
-from datetime import datetime, timezone, timedelta
-from telegram.ext import Application
-
-def schedule_existing_jobs(app):
-    """Сканируем будущие сессии и ставим напоминания через JobQueue"""
-    sessions = db.list_upcoming_sessions()
-    for s in sessions:
-        dt = datetime.fromisoformat(s["dt_utc"])
-        run_at = dt - timedelta(minutes=config.REMINDER_MINUTES)
-        if run_at > datetime.now(timezone.utc):
-            app.job_queue.run_once(send_reminder, when=run_at, data={"session_id": s["id"]})
 
 def main():
     TOKEN = os.getenv("TG_BOT_TOKEN")
@@ -23,30 +12,25 @@ def main():
     WEBHOOK_URL = os.getenv("RENDER_EXTERNAL_URL")
     PORT = int(os.environ.get("PORT", 10000))
 
-    # Инициализация базы данных
+    # Инициализация базы
     db.init_db()
 
-    # Создаём приложение через новый синтаксис PTB 20.8
+    # Создаём приложение
     app = Application.builder().token(TOKEN).build()
 
-    # Регистрируем все обработчики
+    # Регистрируем обработчики
     register_handlers(app)
 
-    # Планируем напоминания для существующих сессий
-    schedule_existing_jobs(app)
-
-    if not WEBHOOK_URL:
-        # локальный fallback: polling для теста
-        print("WEBHOOK_URL не найден — запускаем polling")
+    # Запуск webhook
+    if WEBHOOK_URL:
+        app.run_webhook(
+            listen="0.0.0.0",
+            port=PORT,
+            webhook_url=WEBHOOK_URL,
+        )
+    else:
+        # локально fallback на polling
         app.run_polling()
-        return
-
-    # Запуск webhook для Render
-    app.run_webhook(
-        listen="0.0.0.0",
-        port=PORT,
-        webhook_url=WEBHOOK_URL,
-    )
 
 if __name__ == "__main__":
     main()
