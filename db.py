@@ -6,12 +6,10 @@ DB_FILE = "bot.db"
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    # Игры
     c.execute("""CREATE TABLE IF NOT EXISTS games (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT UNIQUE
     )""")
-    # Сессии
     c.execute("""CREATE TABLE IF NOT EXISTS sessions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         game_id INTEGER,
@@ -19,7 +17,6 @@ def init_db():
         limit_participants INTEGER,
         FOREIGN KEY(game_id) REFERENCES games(id)
     )""")
-    # Участники
     c.execute("""CREATE TABLE IF NOT EXISTS participants (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         session_id INTEGER,
@@ -125,5 +122,17 @@ def remove_participant(session_id, username):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("DELETE FROM participants WHERE session_id = ? AND username = ?", (session_id, username))
+    conn.commit()
+    conn.close()
+
+def update_session(session_id, game_id=None, dt_utc=None, limit=None):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    if game_id is not None:
+        c.execute("UPDATE sessions SET game_id=? WHERE id=?", (game_id, session_id))
+    if dt_utc is not None:
+        c.execute("UPDATE sessions SET dt_utc=? WHERE id=?", (dt_utc, session_id))
+    if limit is not None:
+        c.execute("UPDATE sessions SET limit_participants=? WHERE id=?", (limit, session_id))
     conn.commit()
     conn.close()
