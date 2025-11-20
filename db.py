@@ -6,12 +6,10 @@ DB_FILE = "bot.db"
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    # игры
     c.execute("""CREATE TABLE IF NOT EXISTS games (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT UNIQUE
     )""")
-    # сессии
     c.execute("""CREATE TABLE IF NOT EXISTS sessions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         game_id INTEGER,
@@ -19,7 +17,6 @@ def init_db():
         limit_participants INTEGER,
         FOREIGN KEY(game_id) REFERENCES games(id)
     )""")
-    # участники
     c.execute("""CREATE TABLE IF NOT EXISTS participants (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         session_id INTEGER,
@@ -29,24 +26,11 @@ def init_db():
     conn.commit()
     conn.close()
 
+# Игры
 def add_game(name):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("INSERT OR IGNORE INTO games(name) VALUES (?)", (name,))
-    conn.commit()
-    conn.close()
-
-def edit_game(game_id, new_name):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("UPDATE games SET name = ? WHERE id = ?", (new_name, game_id))
-    conn.commit()
-    conn.close()
-
-def delete_game(game_id):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("DELETE FROM games WHERE id = ?", (game_id,))
     conn.commit()
     conn.close()
 
@@ -58,6 +42,7 @@ def list_games():
     conn.close()
     return games
 
+# Сессии
 def add_session(game_id, dt_utc, limit):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
