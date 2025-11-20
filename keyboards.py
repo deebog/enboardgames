@@ -5,12 +5,11 @@ def format_session_text(session):
     dt_str = session['dt_utc'].replace('T', ' ').split('+')[0]
     participants = ', '.join(session['participants']) if session['participants'] else 'Никто'
     remaining = session['limit'] - len(session['participants'])
-    text = (
+    return (
         f"📅 {dt_str}\n"
         f"🎲 Игра: {session['game']}\n"
         f"👥 Участники: {participants} ({remaining} свободно из {session['limit']})"
     )
-    return text
 
 def get_session_buttons(session, user_id):
     buttons = []
@@ -24,14 +23,11 @@ def get_session_buttons(session, user_id):
         buttons.append(InlineKeyboardButton("❌ Мест нет", callback_data="noop"))
 
     if is_admin:
-        buttons.append(InlineKeyboardButton("✏️ Редактировать", callback_data=f"edit_{session['id']}"))
         buttons.append(InlineKeyboardButton("🗑️ Удалить", callback_data=f"delete_{session['id']}"))
 
     return InlineKeyboardMarkup.from_row(buttons)
 
-def get_game_buttons(game_id):
-    buttons = [
-        InlineKeyboardButton("✏️ Редактировать", callback_data=f"editgame_{game_id}"),
-        InlineKeyboardButton("🗑️ Удалить", callback_data=f"deletegame_{game_id}")
-    ]
-    return InlineKeyboardMarkup.from_row(buttons)
+def get_add_game_button():
+    return InlineKeyboardMarkup.from_row([
+        InlineKeyboardButton("➕ Добавить игру", callback_data="addgame")
+    ])
