@@ -23,6 +23,7 @@ def get_session_buttons(session, user_id):
         buttons.append(InlineKeyboardButton("❌ Мест нет", callback_data="noop"))
 
     if is_admin:
+        buttons.append(InlineKeyboardButton("➕ Создать сессию", callback_data="addsession"))
         buttons.append(InlineKeyboardButton("🗑️ Удалить", callback_data=f"delete_{session['id']}"))
 
     return InlineKeyboardMarkup.from_row(buttons)
@@ -31,3 +32,7 @@ def get_add_game_button():
     return InlineKeyboardMarkup.from_row([
         InlineKeyboardButton("➕ Добавить игру", callback_data="addgame")
     ])
+
+def get_game_selection_buttons(games):
+    buttons = [InlineKeyboardButton(g['name'], callback_data=f"selgame_{g['id']}") for g in games]
+    return InlineKeyboardMarkup.from_column(buttons)
