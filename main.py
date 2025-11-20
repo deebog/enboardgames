@@ -1,53 +1,51 @@
 import os
+from telegram.ext import ApplicationBuilder
 import db
 import config
-from telegram.ext import ApplicationBuilder
 from handlers import register_handlers
 from jobs import send_reminder
 from datetime import datetime, timezone, timedelta
-from zoneinfo import ZoneInfo
 
 def schedule_existing_jobs(app):
-    # Scan DB for future sessions and schedule reminders
-    rows = db.list_upcoming_sessions()
-    for r in rows:
-        dt = datetime.fromisoformat(r["dt_utc"])
+    """Сканируем будущие сессии в DB и ставим напоминания через JobQueue"""
+    sessions = db.list_upcoming_sessions()
+    for s in sessions:
+        dt = datetime.fromisoformat(s["dt_utc"])
         run_at = dt - timedelta(minutes=config.REMINDER_MINUTES)
         if run_at > datetime.now(timezone.utc):
-            # schedule
-            app.job_queue.run_once(send_reminder, when=run_at, data={"session_id": r["id"]})
+            app.job_queue.run_once(send_reminder, when=run_at, data={"session_id": s["id"]})
 
 def main():
-    if not config.TOKEN:
-        raise RuntimeError("TG_BOT_TOKEN not set in environment.")
+    TOKEN = os.getenv("TG_BOT_TOKEN")
+    if not TOKEN:
+        raise RuntimeError("TG_BOT_TOKEN не задан в Environment")
 
-    # init DB
+    WEBHOOK_URL = os.getenv("RENDER_EXTERNAL_URL")
+    PORT = int(os.environ.get("PORT", 10000))
+
+    # Инициализация базы данных
     db.init_db()
 
-    app = ApplicationBuilder().token(config.TOKEN).build()
+    # Создаём приложение
+    app = ApplicationBuilder().token(TOKEN).build()
 
-    # register handlers
+    # Регистрируем все обработчики
     register_handlers(app)
 
-    # schedule reminders for existing sessions
+    # Планируем напоминания для существующих сессий
     schedule_existing_jobs(app)
 
-    # Run webhook on Render
-    RENDER_URL = os.getenv("RENDER_EXTERNAL_URL")
-    if not RENDER_URL:
-        # fallback: run polling locally (for dev)
-        print("RENDER_EXTERNAL_URL not set — running polling (dev mode)")
+    if not WEBHOOK_URL:
+        # Локальный fallback: polling для теста
+        print("RENDER_EXTERNAL_URL не найден — запускаем polling")
         app.run_polling()
         return
 
-    # webhook path — we keep root
-    webhook_url = RENDER_URL  # keep it simple, root path
-
-    port = int(os.environ.get("PORT", 10000))
+    # Запуск webhook
     app.run_webhook(
         listen="0.0.0.0",
-        port=port,
-        webhook_url=webhook_url,
+        port=PORT,
+        webhook_url=WEBHOOK_URL,
     )
 
 if __name__ == "__main__":
