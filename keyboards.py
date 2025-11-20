@@ -1,12 +1,39 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 
-def main_menu_buttons():
-    buttons = [
-        [InlineKeyboardButton("📋 Список сессий", callback_data="show_sessions")],
-        [InlineKeyboardButton("🗂️ Мои записи", callback_data="my_sessions")]
-    ]
-    return InlineKeyboardMarkup(buttons)
+def format_session_text(session):
+    dt_str = session['dt_utc'].replace('T', ' ').split('+')[0]
+    participants = ', '.join(session['participants']) if session['participants'] else 'Никто'
+    remaining = session['limit'] - len(session['participants'])
+    return (
+        f"📅 {dt_str}\n"
+        f"🎲 Игра: {session['game']}\n"
+        f"👥 Участники: {participants} ({remaining} свободно из {session['limit']})"
+    )
+
+def get_session_buttons(session, user_id):
+    buttons = []
+    is_admin = user_id in config.ADMINS
+
+    if user_id in session['participants']:
+        buttons.append(InlineKeyboardButton("❌ Отписаться", callback_data=f"leave_{session['id']}"))
+    elif len(session['participants']) < session['limit']:
+        buttons.append(InlineKeyboardButton("✅ Записаться", callback_data=f"join_{session['id']}"))
+    else:
+        buttons.append(InlineKeyboardButton("❌ Мест нет", callback_data="noop"))
+
+    if is_admin:
+        buttons.append(InlineKeyboardButton("📝 Редактировать", callback_data=f"edit_{session['id']}"))
+        buttons.append(InlineKeyboardButton("🗑️ Удалить", callback_data=f"delete_{session['id']}"))
+        buttons.append(InlineKeyboardButton("➕ Создать сессию", callback_data="addsession"))
+
+    return InlineKeyboardMarkup.from_row(buttons)
+
+def get_global_buttons(user_id):
+    buttons = []
+    if user_id not in config.ADMINS:
+        buttons.append(InlineKeyboardButton("📝 Записаться на все встречи", callback_data="join_all"))
+    return InlineKeyboardMarkup.from_row(buttons)
 
 def get_add_game_button():
     return InlineKeyboardMarkup.from_row([
@@ -16,23 +43,3 @@ def get_add_game_button():
 def get_game_selection_buttons(games):
     buttons = [InlineKeyboardButton(g['name'], callback_data=f"selgame_{g['id']}") for g in games]
     return InlineKeyboardMarkup.from_column(buttons)
-
-def format_session_text(session):
-    participants = ", ".join(session['participants']) if session['participants'] else "(пусто)"
-    free_slots = session['limit'] - len(session['participants'])
-    dt = session['dt'].replace("T", " ")
-    return f"🗓 {dt}\n🎲 {session['game']}\n👥 {len(session['participants'])}/{session['limit']}\nЗаписаны: {participants}\nСвободно мест: {free_slots}"
-
-def get_session_buttons(session, user_id):
-    buttons = []
-    username = str(user_id)
-    if username not in session['participants'] and len(session['participants']) < session['limit']:
-        buttons.append(InlineKeyboardButton("✅ Записаться", callback_data=f"join_{session['id']}"))
-    if username in session['participants']:
-        buttons.append(InlineKeyboardButton("❌ Отписаться", callback_data=f"leave_{session['id']}"))
-    if user_id in config.ADMINS:
-        buttons.append(InlineKeyboardButton("🗑 Удалить сессию", callback_data=f"delete_{session['id']}"))
-    return InlineKeyboardMarkup.from_row(buttons)
-
-def get_global_buttons(user_id):
-    return InlineKeyboardMarkup.from_row([InlineKeyboardButton("➕ Записаться на все встречи", callback_data="join_all")])
