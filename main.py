@@ -7,6 +7,7 @@ from datetime import datetime, timezone, timedelta
 from telegram.ext import Application
 
 def schedule_existing_jobs(app):
+    """Сканируем будущие сессии и ставим напоминания через JobQueue"""
     sessions = db.list_upcoming_sessions()
     for s in sessions:
         dt = datetime.fromisoformat(s["dt_utc"])
@@ -22,24 +23,25 @@ def main():
     WEBHOOK_URL = os.getenv("RENDER_EXTERNAL_URL")
     PORT = int(os.environ.get("PORT", 10000))
 
-    # Инициализация базы
+    # Инициализация базы данных
     db.init_db()
 
-    # Новый синтаксис PTB 20.8
+    # Создаём приложение через новый синтаксис PTB 20.8
     app = Application.builder().token(TOKEN).build()
 
-    # Регистрируем обработчики
+    # Регистрируем все обработчики
     register_handlers(app)
 
     # Планируем напоминания для существующих сессий
     schedule_existing_jobs(app)
 
     if not WEBHOOK_URL:
+        # локальный fallback: polling для теста
         print("WEBHOOK_URL не найден — запускаем polling")
         app.run_polling()
         return
 
-    # Запуск webhook
+    # Запуск webhook для Render
     app.run_webhook(
         listen="0.0.0.0",
         port=PORT,
