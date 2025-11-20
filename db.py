@@ -1,141 +1,122 @@
 import sqlite3
-from contextlib import closing
+import os
 from datetime import datetime
-from config import DB_PATH
 
-def get_conn():
-    conn = sqlite3.connect(str(DB_PATH), detect_types=sqlite3.PARSE_DECLTYPES)
-    conn.row_factory = sqlite3.Row
-    return conn
+DB_FILE = "bot.db"
 
 def init_db():
-    with closing(get_conn()) as conn:
-        cur = conn.cursor()
-        cur.executescript("""
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("""
         CREATE TABLE IF NOT EXISTS games (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE NOT NULL
-        );
-
+            name TEXT UNIQUE
+        )
+    """)
+    c.execute("""
         CREATE TABLE IF NOT EXISTS sessions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            game_id INTEGER NOT NULL,
-            dt_utc TEXT NOT NULL, -- ISO UTC datetime string
-            limit_count INTEGER NOT NULL,
-            creator_id INTEGER NOT NULL
-        );
-
+            game_id INTEGER,
+            dt_utc TEXT,
+            limit_participants INTEGER,
+            FOREIGN KEY(game_id) REFERENCES games(id)
+        )
+    """)
+    c.execute("""
         CREATE TABLE IF NOT EXISTS participants (
-            session_id INTEGER NOT NULL,
-            user_id INTEGER NOT NULL,
-            PRIMARY KEY (session_id, user_id)
-        );
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id INTEGER,
+            username TEXT,
+            FOREIGN KEY(session_id) REFERENCES sessions(id)
+        )
+    """)
+    conn.commit()
+    conn.close()
 
-        CREATE TABLE IF NOT EXISTS users (
-            user_id INTEGER PRIMARY KEY,
-            reminders_enabled INTEGER DEFAULT 1
-        );
-        """)
-        conn.commit()
+def add_game(name):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("INSERT OR IGNORE INTO games(name) VALUES (?)", (name,))
+    conn.commit()
+    conn.close()
 
-# Games
 def list_games():
-    with closing(get_conn()) as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT id, name FROM games ORDER BY name")
-        return cur.fetchall()
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT id, name FROM games")
+    result = c.fetchall()
+    conn.close()
+    return [{"id": r[0], "name": r[1]} for r in result]
 
-def add_game(name: str):
-    with closing(get_conn()) as conn:
-        cur = conn.cursor()
-        try:
-            cur.execute("INSERT INTO games (name) VALUES (?)", (name.strip(),))
-            conn.commit()
-            return True
-        except Exception:
-            return False
-
-def delete_game_by_id(game_id: int):
-    with closing(get_conn()) as conn:
-        cur = conn.cursor()
-        cur.execute("DELETE FROM games WHERE id=?", (game_id,))
-        conn.commit()
-
-def get_game(game_id: int):
-    with closing(get_conn()) as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT id, name FROM games WHERE id=?", (game_id,))
-        return cur.fetchone()
-
-# Sessions
-def add_session(game_id: int, dt_utc_iso: str, limit_count: int, creator_id: int):
-    with closing(get_conn()) as conn:
-        cur = conn.cursor()
-        cur.execute("INSERT INTO sessions (game_id, dt_utc, limit_count, creator_id) VALUES (?,?,?,?)",
-                    (game_id, dt_utc_iso, limit_count, creator_id))
-        conn.commit()
-        return cur.lastrowid
-
-def get_session(session_id: int):
-    with closing(get_conn()) as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT s.*, g.name as game_name FROM sessions s JOIN games g ON s.game_id=g.id WHERE s.id=?",
-                    (session_id,))
-        return cur.fetchone()
+def add_session(game_id, dt_utc, limit):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("INSERT INTO sessions(game_id, dt_utc, limit_participants) VALUES (?, ?, ?)", (game_id, dt_utc, limit))
+    conn.commit()
+    conn.close()
 
 def list_upcoming_sessions():
-    with closing(get_conn()) as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT s.*, g.name as game_name FROM sessions s JOIN games g ON s.game_id=g.id ORDER BY s.dt_utc")
-        return cur.fetchall()
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    now = datetime.utcnow().isoformat()
+    c.execute("""
+        SELECT s.id, g.name, s.dt_utc, s.limit_participants
+        FROM sessions s
+        JOIN games g ON g.id = s.game_id
+        WHERE s.dt_utc >= ?
+        ORDER BY s.dt_utc ASC
+    """, (now,))
+    sessions = []
+    for row in c.fetchall():
+        session_id, game, dt_utc, limit = row
+        c.execute("SELECT username FROM participants WHERE session_id = ?", (session_id,))
+        participants = [r[0] for r in c.fetchall()]
+        sessions.append({
+            "id": session_id,
+            "game": game,
+            "dt_utc": dt_utc,
+            "limit": limit,
+            "participants": participants
+        })
+    conn.close()
+    return sessions
 
-def delete_session(session_id: int):
-    with closing(get_conn()) as conn:
-        cur = conn.cursor()
-        cur.execute("DELETE FROM participants WHERE session_id=?", (session_id,))
-        cur.execute("DELETE FROM sessions WHERE id=?", (session_id,))
-        conn.commit()
+def get_session(session_id):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("""
+        SELECT s.id, g.name, s.dt_utc, s.limit_participants
+        FROM sessions s
+        JOIN games g ON g.id = s.game_id
+        WHERE s.id = ?
+    """, (session_id,))
+    row = c.fetchone()
+    if not row:
+        return None
+    session_id, game, dt_utc, limit = row
+    c.execute("SELECT username FROM participants WHERE session_id = ?", (session_id,))
+    participants = [r[0] for r in c.fetchall()]
+    conn.close()
+    return {"id": session_id, "game": game, "dt_utc": dt_utc, "limit": limit, "participants": participants}
 
-# Participants
-def add_participant(session_id: int, user_id: int):
-    with closing(get_conn()) as conn:
-        cur = conn.cursor()
-        try:
-            cur.execute("INSERT INTO participants (session_id, user_id) VALUES (?,?)", (session_id, user_id))
-            conn.commit()
-            return True
-        except sqlite3.IntegrityError:
-            return False
+def add_participant(session_id, username):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("INSERT INTO participants(session_id, username) VALUES (?, ?)", (session_id, username))
+    conn.commit()
+    conn.close()
 
-def remove_participant(session_id: int, user_id: int):
-    with closing(get_conn()) as conn:
-        cur = conn.cursor()
-        cur.execute("DELETE FROM participants WHERE session_id=? AND user_id=?", (session_id, user_id))
-        conn.commit()
+def remove_participant(session_id, username):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("DELETE FROM participants WHERE session_id = ? AND username = ?", (session_id, username))
+    conn.commit()
+    conn.close()
 
-def list_participants(session_id: int):
-    with closing(get_conn()) as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT user_id FROM participants WHERE session_id=?", (session_id,))
-        return [r["user_id"] for r in cur.fetchall()]
-
-def participant_count(session_id: int):
-    with closing(get_conn()) as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) as c FROM participants WHERE session_id=?", (session_id,))
-        return cur.fetchone()["c"]
-
-# Users reminders
-def set_user_reminders(user_id: int, enabled: bool):
-    with closing(get_conn()) as conn:
-        cur = conn.cursor()
-        cur.execute("INSERT INTO users (user_id, reminders_enabled) VALUES (?,?) ON CONFLICT(user_id) DO UPDATE SET reminders_enabled=excluded.reminders_enabled",
-                    (user_id, 1 if enabled else 0))
-        conn.commit()
-
-def get_user_reminders(user_id: int):
-    with closing(get_conn()) as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT reminders_enabled FROM users WHERE user_id=?", (user_id,))
-        r = cur.fetchone()
-        return bool(r["reminders_enabled"]) if r else True
+def delete_session(session_id):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("DELETE FROM participants WHERE session_id = ?", (session_id,))
+    c.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+    conn.commit()
+    conn.close()
