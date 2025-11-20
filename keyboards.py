@@ -1,25 +1,30 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import db
+import config
 
-def games_keyboard():
-    rows = []
-    for g in db.list_games():
-        rows.append([InlineKeyboardButton(g["name"], callback_data=f"pick_game:{g['id']}")])
-    return InlineKeyboardMarkup(rows)
+def format_session_text(session):
+    dt_str = session['dt_utc'].replace('T', ' ').split('+')[0]
+    participants = ', '.join(session['participants']) if session['participants'] else 'Никто'
+    remaining = session['limit'] - len(session['participants'])
+    text = (
+        f"📅 {dt_str}\n"
+        f"🎲 Игра: {session['game']}\n"
+        f"👥 Участники: {participants} ({remaining} свободно из {session['limit']})"
+    )
+    return text
 
-def edit_games_keyboard():
-    rows = []
-    for g in db.list_games():
-        rows.append([InlineKeyboardButton(f"❌ {g['name']}", callback_data=f"del_game:{g['id']}")])
-    rows.append([InlineKeyboardButton("➕ Добавить игру (командой /addgame)", callback_data="add_game")])
-    return InlineKeyboardMarkup(rows)
-
-def session_actions_keyboard(session_id: int, user_id: int, is_joined: bool, can_join: bool):
-    kb = []
-    if is_joined:
-        kb.append([InlineKeyboardButton("Выписаться", callback_data=f"leave:{session_id}")])
+def get_session_buttons(session, user_id):
+    buttons = []
+    is_admin = user_id in config.ADMINS
+    if user_id in [p for p in session['participants']]:
+        buttons.append(InlineKeyboardButton("❌ Отписаться", callback_data=f"leave_{session['id']}"))
+    elif len(session['participants']) < session['limit']:
+        buttons.append(InlineKeyboardButton("✅ Записаться", callback_data=f"join_{session['id']}"))
     else:
-        if can_join:
-            kb.append([InlineKeyboardButton("Записаться", callback_data=f"join:{session_id}")])
-    kb.append([InlineKeyboardButton("Обновить", callback_data=f"refresh:{session_id}")])
-    return InlineKeyboardMarkup(kb)
+        buttons.append(InlineKeyboardButton("❌ Мест нет", callback_data="noop"))
+
+    if is_admin:
+        buttons.append(InlineKeyboardButton("✏️ Редактировать", callback_data=f"edit_{session['id']}"))
+        buttons.append(InlineKeyboardButton("🗑️ Удалить", callback_data=f"delete_{session['id']}"))
+
+    return InlineKeyboardMarkup.from_row(buttons)
