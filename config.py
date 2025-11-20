@@ -5,7 +5,7 @@ from pathlib import Path
 TOKEN = os.getenv("TG_BOT_TOKEN")
 
 # Admin Telegram user IDs (replace with yours)
-ADMIN_IDS = [200615203]
+ADMINS = [200615203]
 
 # Path to SQLite DB file (will be created in the working directory)
 DB_PATH = Path("sessions.db")
