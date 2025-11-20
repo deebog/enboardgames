@@ -6,10 +6,12 @@ DB_FILE = "bot.db"
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
+    # игры
     c.execute("""CREATE TABLE IF NOT EXISTS games (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT UNIQUE
     )""")
+    # сессии
     c.execute("""CREATE TABLE IF NOT EXISTS sessions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         game_id INTEGER,
@@ -17,6 +19,7 @@ def init_db():
         limit_participants INTEGER,
         FOREIGN KEY(game_id) REFERENCES games(id)
     )""")
+    # участники
     c.execute("""CREATE TABLE IF NOT EXISTS participants (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         session_id INTEGER,
@@ -33,13 +36,27 @@ def add_game(name):
     conn.commit()
     conn.close()
 
+def edit_game(game_id, new_name):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("UPDATE games SET name = ? WHERE id = ?", (new_name, game_id))
+    conn.commit()
+    conn.close()
+
+def delete_game(game_id):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("DELETE FROM games WHERE id = ?", (game_id,))
+    conn.commit()
+    conn.close()
+
 def list_games():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("SELECT id, name FROM games")
-    result = [{"id": r[0], "name": r[1]} for r in c.fetchall()]
+    games = [{"id": r[0], "name": r[1]} for r in c.fetchall()]
     conn.close()
-    return result
+    return games
 
 def add_session(game_id, dt_utc, limit):
     conn = sqlite3.connect(DB_FILE)
@@ -93,6 +110,14 @@ def get_session(session_id):
     conn.close()
     return {"id": session_id, "game": game, "dt_utc": dt_utc, "limit": limit, "participants": participants}
 
+def delete_session(session_id):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("DELETE FROM participants WHERE session_id = ?", (session_id,))
+    c.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+    conn.commit()
+    conn.close()
+
 def add_participant(session_id, username):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
@@ -104,13 +129,5 @@ def remove_participant(session_id, username):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("DELETE FROM participants WHERE session_id = ? AND username = ?", (session_id, username))
-    conn.commit()
-    conn.close()
-
-def delete_session(session_id):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("DELETE FROM participants WHERE session_id = ?", (session_id,))
-    c.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
     conn.commit()
     conn.close()
