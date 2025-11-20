@@ -1,88 +1,138 @@
 import sqlite3
 from datetime import datetime
 
-conn = sqlite3.connect("bot.db", check_same_thread=False)
-c = conn.cursor()
+DB_FILE = "bot.db"
 
-# Создание таблиц
-c.execute("""CREATE TABLE IF NOT EXISTS games (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT UNIQUE
-)""")
-
-c.execute("""CREATE TABLE IF NOT EXISTS sessions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    game_id INTEGER,
-    dt TEXT,
-    limit_count INTEGER,
-    FOREIGN KEY(game_id) REFERENCES games(id)
-)""")
-
-c.execute("""CREATE TABLE IF NOT EXISTS participants (
-    session_id INTEGER,
-    username TEXT,
-    PRIMARY KEY(session_id, username),
-    FOREIGN KEY(session_id) REFERENCES sessions(id)
-)""")
-
-conn.commit()
+def init_db():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("""CREATE TABLE IF NOT EXISTS games (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE
+    )""")
+    c.execute("""CREATE TABLE IF NOT EXISTS sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        game_id INTEGER,
+        dt_utc TEXT,
+        limit_participants INTEGER,
+        FOREIGN KEY(game_id) REFERENCES games(id)
+    )""")
+    c.execute("""CREATE TABLE IF NOT EXISTS participants (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id INTEGER,
+        username TEXT,
+        FOREIGN KEY(session_id) REFERENCES sessions(id)
+    )""")
+    conn.commit()
+    conn.close()
 
 # Игры
 def add_game(name):
-    c.execute("INSERT OR IGNORE INTO games(name) VALUES(?)", (name,))
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("INSERT OR IGNORE INTO games(name) VALUES (?)", (name,))
     conn.commit()
+    conn.close()
 
 def list_games():
-    c.execute("SELECT id,name FROM games ORDER BY name")
-    return [{"id": row[0], "name": row[1]} for row in c.fetchall()]
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT id, name FROM games")
+    games = [{"id": r[0], "name": r[1]} for r in c.fetchall()]
+    conn.close()
+    return games
+
+def get_game(game_id):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT id, name FROM games WHERE id=?", (game_id,))
+    row = c.fetchone()
+    conn.close()
+    return {"id": row[0], "name": row[1]} if row else None
 
 # Сессии
-def add_session(game_id, dt_str, limit_count):
-    c.execute("INSERT INTO sessions(game_id, dt, limit_count) VALUES(?,?,?)", (game_id, dt_str, limit_count))
+def add_session(game_id, dt_utc, limit):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("INSERT INTO sessions(game_id, dt_utc, limit_participants) VALUES (?, ?, ?)",
+              (game_id, dt_utc, limit))
     conn.commit()
+    conn.close()
 
 def list_upcoming_sessions():
-    now = datetime.now().isoformat()
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    now = datetime.utcnow().isoformat()
     c.execute("""
-        SELECT s.id, g.name, s.dt, s.limit_count
+        SELECT s.id, g.name, s.dt_utc, s.limit_participants
         FROM sessions s
-        JOIN games g ON s.game_id = g.id
-        WHERE s.dt > ?
-        ORDER BY s.dt
+        JOIN games g ON g.id = s.game_id
+        WHERE s.dt_utc >= ?
+        ORDER BY s.dt_utc ASC
     """, (now,))
     sessions = []
     for row in c.fetchall():
-        session_id, game_name, dt, limit_count = row
-        c.execute("SELECT username FROM participants WHERE session_id=?", (session_id,))
+        session_id, game, dt_utc, limit = row
+        c.execute("SELECT username FROM participants WHERE session_id = ?", (session_id,))
         participants = [r[0] for r in c.fetchall()]
         sessions.append({
             "id": session_id,
-            "game": game_name,
-            "dt": dt,
-            "limit": limit_count,
+            "game": game,
+            "dt_utc": dt_utc,
+            "limit": limit,
             "participants": participants
         })
+    conn.close()
     return sessions
 
 def get_session(session_id):
-    c.execute("SELECT s.id, g.name, s.dt, s.limit_count FROM sessions s JOIN games g ON s.game_id=g.id WHERE s.id=?", (session_id,))
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("""
+        SELECT s.id, g.name, s.dt_utc, s.limit_participants
+        FROM sessions s
+        JOIN games g ON g.id = s.game_id
+        WHERE s.id = ?
+    """, (session_id,))
     row = c.fetchone()
     if not row:
         return None
-    session_id, game_name, dt, limit_count = row
-    c.execute("SELECT username FROM participants WHERE session_id=?", (session_id,))
+    session_id, game, dt_utc, limit = row
+    c.execute("SELECT username FROM participants WHERE session_id = ?", (session_id,))
     participants = [r[0] for r in c.fetchall()]
-    return {"id": session_id, "game": game_name, "dt": dt, "limit": limit_count, "participants": participants}
-
-def add_participant(session_id, username):
-    c.execute("INSERT OR IGNORE INTO participants(session_id, username) VALUES(?,?)", (session_id, username))
-    conn.commit()
-
-def remove_participant(session_id, username):
-    c.execute("DELETE FROM participants WHERE session_id=? AND username=?", (session_id, username))
-    conn.commit()
+    conn.close()
+    return {"id": session_id, "game": game, "dt_utc": dt_utc, "limit": limit, "participants": participants}
 
 def delete_session(session_id):
-    c.execute("DELETE FROM participants WHERE session_id=?", (session_id,))
-    c.execute("DELETE FROM sessions WHERE id=?", (session_id,))
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("DELETE FROM participants WHERE session_id = ?", (session_id,))
+    c.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
     conn.commit()
+    conn.close()
+
+def add_participant(session_id, username):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("INSERT INTO participants(session_id, username) VALUES (?, ?)", (session_id, username))
+    conn.commit()
+    conn.close()
+
+def remove_participant(session_id, username):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("DELETE FROM participants WHERE session_id = ? AND username = ?", (session_id, username))
+    conn.commit()
+    conn.close()
+
+def update_session(session_id, game_id=None, dt_utc=None, limit=None):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    if game_id is not None:
+        c.execute("UPDATE sessions SET game_id=? WHERE id=?", (game_id, session_id))
+    if dt_utc is not None:
+        c.execute("UPDATE sessions SET dt_utc=? WHERE id=?", (dt_utc, session_id))
+    if limit is not None:
+        c.execute("UPDATE sessions SET limit_participants=? WHERE id=?", (limit, session_id))
+    conn.commit()
+    conn.close()
