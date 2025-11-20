@@ -23,9 +23,16 @@ def get_session_buttons(session, user_id):
         buttons.append(InlineKeyboardButton("❌ Мест нет", callback_data="noop"))
 
     if is_admin:
-        buttons.append(InlineKeyboardButton("➕ Создать сессию", callback_data="addsession"))
+        buttons.append(InlineKeyboardButton("📝 Редактировать", callback_data=f"edit_{session['id']}"))
         buttons.append(InlineKeyboardButton("🗑️ Удалить", callback_data=f"delete_{session['id']}"))
+        buttons.append(InlineKeyboardButton("➕ Создать сессию", callback_data="addsession"))
 
+    return InlineKeyboardMarkup.from_row(buttons)
+
+def get_global_buttons(user_id):
+    buttons = []
+    if user_id not in config.ADMINS:
+        buttons.append(InlineKeyboardButton("📝 Записаться на все встречи", callback_data="join_all"))
     return InlineKeyboardMarkup.from_row(buttons)
 
 def get_add_game_button():
