@@ -6,10 +6,12 @@ DB_FILE = "bot.db"
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
+    # Игры
     c.execute("""CREATE TABLE IF NOT EXISTS games (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT UNIQUE
     )""")
+    # Сессии
     c.execute("""CREATE TABLE IF NOT EXISTS sessions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         game_id INTEGER,
@@ -17,6 +19,7 @@ def init_db():
         limit_participants INTEGER,
         FOREIGN KEY(game_id) REFERENCES games(id)
     )""")
+    # Участники
     c.execute("""CREATE TABLE IF NOT EXISTS participants (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         session_id INTEGER,
@@ -41,6 +44,14 @@ def list_games():
     games = [{"id": r[0], "name": r[1]} for r in c.fetchall()]
     conn.close()
     return games
+
+def get_game(game_id):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT id, name FROM games WHERE id=?", (game_id,))
+    row = c.fetchone()
+    conn.close()
+    return {"id": row[0], "name": row[1]} if row else None
 
 # Сессии
 def add_session(game_id, dt_utc, limit):
