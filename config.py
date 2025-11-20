@@ -14,4 +14,4 @@ DB_PATH = Path("sessions.db")
 REMINDER_MINUTES = int(os.getenv("REMINDER_MINUTES", "60"))
 
 # Timezone to interpret input datetimes (recommend Europe/Berlin)
-DEFAULT_TZ = os.getenv("DEFAULT_TZ", "Europe/Berlin")
+DEFAULT_TZ = os.getenv("DEFAULT_TZ", "Europe/Moscow")
