@@ -1,23 +1,28 @@
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler
-import config
-from handlers import start, list_sessions, list_games, button_handler
+import os
+from telegram.ext import Application
+import db
+from handlers import register_handlers
 
 def main():
-    # Создаем приложение Telegram
-    app = ApplicationBuilder().token(config.TOKEN).build()
+    TOKEN = os.getenv("TG_BOT_TOKEN", "ВАШ_ТОКЕН_ЗДЕСЬ")
+    if not TOKEN:
+        raise RuntimeError("TG_BOT_TOKEN не задан!")
 
-    # Регистрируем команды
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("sessions", list_sessions))
-    app.add_handler(CommandHandler("games", list_games))
+    WEBHOOK_URL = os.getenv("RENDER_EXTERNAL_URL")
+    PORT = int(os.environ.get("PORT", 10000))
 
-    # Регистрируем обработчик всех инлайн-кнопок
-    app.add_handler(CallbackQueryHandler(button_handler))
+    db.init_db()
+    app = Application.builder().token(TOKEN).build()
+    register_handlers(app)
 
-    # Запуск long polling
-    # ⚠️ Не использовать webhook, не открывать порт
-    print("Бот запущен. Ожидание команд...")
-    app.run_polling()
+    if WEBHOOK_URL:
+        app.run_webhook(
+            listen="0.0.0.0",
+            port=PORT,
+            webhook_url=WEBHOOK_URL,
+        )
+    else:
+        app.run_polling()
 
 if __name__ == "__main__":
     main()
