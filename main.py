@@ -12,7 +12,6 @@ def main():
     PORT = int(os.environ.get("PORT", 10000))
 
     db.init_db()
-
     app = Application.builder().token(TOKEN).build()
     register_handlers(app)
 
